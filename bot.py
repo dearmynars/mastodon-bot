@@ -68,7 +68,7 @@ def process_mention(content, keyword_dict):
     """멘션 내용을 분석하여 알맞은 답변 리턴"""
     text = clean_html(content)
     
-    # 1. nDm 주사위 기능 (예: 1d100, 2d50+10, 3d6-2 등)
+# 1. nDm 주사위 기능 (예: 1d100, 2d50+10, 3d6-2 등)
     dice_match = re.search(r'(\d+)d(\d+)(?:([+-])(\d+))?', text, re.IGNORECASE)
     if dice_match:
         count, sides = int(dice_match.group(1)), int(dice_match.group(2))
@@ -81,17 +81,21 @@ def process_mention(content, keyword_dict):
         if sign == '+': total += modifier
         elif sign == '-': total -= modifier
         
-        # 시트에 'dice' 키워드가 있으면 시트 양식 사용, 없으면 기본 양식
+        # 시트에 'dice' 키워드가 있으면 시트 양식 사용
         if 'dice' in keyword_dict:
-            template = random.choice(keyword_dict['dice'])
-            return template.format(
-                total=total,
-                rolls=f"[{', '.join(map(str, rolls))}]",
-                count=count,
-                sides=sides
-            )
+            try:
+                template = random.choice(keyword_dict['dice'])
+                return template.format(
+                    count=count,
+                    sides=sides,
+                    total=total,
+                    rolls=f"[{', '.join(map(str, rolls))}]"
+                )
+            except Exception as e:
+                print(f"주사위 서식 적용 에러: {e}")
+                return f"{count}d{sides} 결과 : {total}"
         else:
-            return f"{total} ({', '.join(map(str, rolls))})"
+            return f"{count}d{sides} 결과 : {total}"
 
     # 2. YN 기능에 대한 답변
     if re.search(r'\b(yn)\b', text, re.IGNORECASE):
