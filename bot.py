@@ -13,7 +13,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 MASTODON_ACCESS_TOKEN = os.environ.get('MASTODON_ACCESS_TOKEN', '')
 MASTODON_API_BASE_URL = 'https://planet.moe'
 
-GOOGLE_SHEET_NAME = '네_구글_스프레드시트_정확한_이름' # ⚠️ 본인 시트 제목 확인!
+GOOGLE_SHEET_NAME = 'NEW_BOT' # ⚠️ 본인 시트 제목 확인!
 # =================================================
 
 # --- 1. Render 가짜 웹서버 (Timed Out 방지용) ---
