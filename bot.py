@@ -77,14 +77,22 @@ def process_mention(content, keyword_dict):
     if re.search(r'\b(yn)\b', text, re.IGNORECASE):
         return f"🔮 질문에 대한 답변: {random.choice(['Y', 'N'])}"
 
-    # 3. 특정 키워드 자동 답변 (동일한 확률로 랜덤 뽑기)
-    matched_replies = []
-    for kw, replies in keyword_dict.items():
-        if kw in text:
-            matched_replies.extend(replies)
-            
-    if matched_replies:
-        return random.choice(matched_replies)
+    # 3. [대괄호] 키워드 자동 답변 기능
+    # 사용자가 보낸 텍스트에서 [단어] 형태인 것들을 모두 추출합니다. (예: "[사과]가 먹고싶다" -> ["사과"])
+    user_brackets = re.findall(r'\[(.*?)\]', text)
+    
+    if user_brackets:
+        matched_replies = []
+        
+        # 사용자가 대괄호 안에 적은 단어들 중 구글 시트에 등록된 키워드가 있는지 확인
+        for b_word in user_brackets:
+            b_word_clean = b_word.strip()
+            if b_word_clean in keyword_dict:
+                matched_replies.extend(keyword_dict[b_word_clean])
+                
+        if matched_replies:
+            # 매칭된 답변 중 동일한 확률로 무작위 추첨
+            return random.choice(matched_replies)
         
     return None
 
