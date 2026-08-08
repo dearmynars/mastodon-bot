@@ -3,29 +3,40 @@ import random
 import re
 import os
 import json
+import threading
 import gspread
+from flask import Flask
 from mastodon import Mastodon
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ================= [ ⚙️ 설정 영역 ] =================
-# 마스토돈 토큰은 Render 환경변수에서 가져오거나, 없으면 아래 기본값을 씁니다.
-MASTODON_ACCESS_TOKEN = os.environ.get('MASTODON_ACCESS_TOKEN', '여기에_네_마스토돈_토큰을_넣어두어도_돼')
-MASTODON_API_BASE_URL = 'https://planet.moe'  # planet.moe 주소 지정
+MASTODON_ACCESS_TOKEN = os.environ.get('MASTODON_ACCESS_TOKEN', '')
+MASTODON_API_BASE_URL = 'https://planet.moe'
 
-GOOGLE_SHEET_NAME = 'NEW_BOT' # ⚠️ 구글 시트 제목 적기!
-# =================================================--
+GOOGLE_SHEET_NAME = 'NEW_BOT' # ⚠️ 본인 시트 제목 적기!
+# =================================================
 
-# 1. 구글 인증 정보 로드 (Render 환경변수에서 읽어옴)
+# --- 1. Render 가짜 웹서버 (Timed Out 방지용) ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "🤖 마스토돈 봇이 정상 작동 중입니다!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+# -------------------------------------------------
+
+# --- 2. 구글 인증 및 마스토돈 연결 ---
 json_str = os.environ.get('GOOGLE_CREDS_JSON')
 if json_str:
     creds_dict = json.loads(json_str)
-    # from_service_account_info 대신 from_json_keyfile_dict 로 변경되었습니다!
     creds = ServiceAccountCredentials.from_json_keyfile_dict(
         creds_dict, 
         scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     )
 else:
-    # 혹시 환경변수가 설정 안 되었을 때를 대비한 예외 처리
     print("❌ 오류: GOOGLE_CREDS_JSON 환경변수가 설정되지 않았습니다.")
 
 gc = gspread.authorize(creds)
@@ -46,7 +57,7 @@ def get_google_sheet_data():
                 keyword_dict[kw].append(rep)
         return keyword_dict
     except Exception as e:
-        print(f"구글 시트 불러오기 실패 (재시도 예정): {e}")
+        print(f"구글 시트 불러오기 실패: {e}")
         return {}
 
 def clean_html(raw_html):
@@ -78,20 +89,16 @@ def process_mention(content, keyword_dict):
         return f"🔮 질문에 대한 답변: {random.choice(['Y', 'N'])}"
 
     # 3. [대괄호] 키워드 자동 답변 기능
-    # 사용자가 보낸 텍스트에서 [단어] 형태인 것들을 모두 추출합니다. (예: "[사과]가 먹고싶다" -> ["사과"])
     user_brackets = re.findall(r'\[(.*?)\]', text)
     
     if user_brackets:
         matched_replies = []
-        
-        # 사용자가 대괄호 안에 적은 단어들 중 구글 시트에 등록된 키워드가 있는지 확인
         for b_word in user_brackets:
             b_word_clean = b_word.strip()
             if b_word_clean in keyword_dict:
                 matched_replies.extend(keyword_dict[b_word_clean])
                 
         if matched_replies:
-            # 매칭된 답변 중 동일한 확률로 무작위 추첨
             return random.choice(matched_replies)
         
     return None
@@ -100,7 +107,6 @@ def main():
     print("🤖 마스토돈 15초 칼답 봇이 가동되었습니다!")
     last_notification_id = None
     
-    # 처음 켤 때 기존 알림은 무시
     try:
         init_notes = mastodon.notifications(limit=1)
         if init_notes:
@@ -122,7 +128,7 @@ def main():
                     sender = status['account']['acct']
                     status_id = status['id']
                     content = status['content']
-                    original_visibility = status['visibility'] # 상대방 공개설정 낚아채기!
+                    original_visibility = status['visibility']
                     
                     reply_text = process_mention(content, keyword_dict)
                     
@@ -138,7 +144,9 @@ def main():
         except Exception as e:
             print(f"오류 발생: {e}")
             
-        time.sleep(15) # 15초마다 마스토돈 감시
+        time.sleep(15)
 
 if __name__ == "__main__":
+    # Render 타임아웃 방지용 웹서버 스레드 시작
+    threading.Thread(target=run_flask, daemon=True).start()
     main()
