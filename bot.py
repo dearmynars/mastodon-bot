@@ -1,4 +1,3 @@
-import requests # 맨 위에 import 추가
 import time
 import random
 import re
@@ -14,7 +13,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 MASTODON_ACCESS_TOKEN = os.environ.get('MASTODON_ACCESS_TOKEN', '')
 MASTODON_API_BASE_URL = 'https://planet.moe'
 
-GOOGLE_SHEET_NAME = 'NEW_BOT' # ⚠️ 본인 시트 제목 확인!
+GOOGLE_SHEET_NAME = 'NEW_BOT' # ⚠️ 본인 시트 제목 적기!
 # =================================================
 
 # --- 1. Render 가짜 웹서버 (Timed Out 방지용) ---
@@ -123,9 +122,8 @@ def process_mention(content, keyword_dict):
 
 def auto_toot_loop():
     """3시간~6시간 간격으로 구글 시트의 auto_toot 문구를 퍼블릭으로 자동 작성합니다."""
-    # 처음 봇 켜진 후 첫 툿까지 대기 시간 (예: 3시간 ~ 6시간 사이 무작위 대기)
     while True:
-        wait_seconds = random.randint(3 * 3600, 6 * 3600)  # 3시간(10800초) ~ 6시간(21600초)
+        wait_seconds = random.randint(3 * 3600, 6 * 3600)
         hours = round(wait_seconds / 3600, 2)
         print(f"⏰ 다음 자동 툿까지 {hours}시간 대기합니다.")
         time.sleep(wait_seconds)
@@ -134,32 +132,10 @@ def auto_toot_loop():
             keyword_dict = get_google_sheet_data()
             if 'auto_toot' in keyword_dict and keyword_dict['auto_toot']:
                 toot_text = random.choice(keyword_dict['auto_toot'])
-                mastodon.status_post(status=toot_text, visibility='public')
+                mastodon.status_post(status=toot_text, visibility='followers_only')
                 print(f"📢 [자동 툿 성공] {toot_text}")
         except Exception as e:
             print(f"자동 툿 작성 중 오류 발생: {e}")
-
-def self_ping_loop():
-    """10분마다 자기 자신의 Render URL에 접속해서 수면 방지"""
-    # ⚠️ 아래 주소를 본인의 실제 Render URL로 변경하세요!
-    MY_RENDER_URL = "https://mastodon-bot-xewg.onrender.com" 
-    
-    while True:
-        time.sleep(600)  # 10분(600초)마다 실행
-        try:
-            res = requests.get(MY_RENDER_URL)
-            print(f"⏰ 셀프 핑 전송 완료 (상태 코드: {res.status_code})")
-        except Exception as e:
-            print(f"셀프 핑 실패: {e}")
-
-if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    threading.Thread(target=auto_toot_loop, daemon=True).start()
-    
-    # 셀프 핑 스레드 시작
-    threading.Thread(target=self_ping_loop, daemon=True).start()
-    
-    main()
 
 def main():
     print("🤖 마스토돈 15초 칼답 & 자동 툿 봇이 가동되었습니다!")
@@ -211,5 +187,5 @@ if __name__ == "__main__":
     # 자동 툿 주기 스레드
     threading.Thread(target=auto_toot_loop, daemon=True).start()
     
-    # 메인 멘션 감시 루프
+    # 메인 멘션 감시 실행
     main()
