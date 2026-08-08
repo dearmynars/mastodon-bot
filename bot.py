@@ -19,7 +19,8 @@ GOOGLE_SHEET_NAME = 'NEW_BOT' # ⚠️ 구글 시트 제목 적기!
 json_str = os.environ.get('GOOGLE_CREDS_JSON')
 if json_str:
     creds_dict = json.loads(json_str)
-    creds = ServiceAccountCredentials.from_service_account_info(
+    # from_service_account_info 대신 from_json_keyfile_dict 로 변경되었습니다!
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(
         creds_dict, 
         scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     )
