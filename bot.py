@@ -13,7 +13,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 MASTODON_ACCESS_TOKEN = os.environ.get('MASTODON_ACCESS_TOKEN', '')
 MASTODON_API_BASE_URL = 'https://planet.moe'
 
-GOOGLE_SHEET_NAME = 'NEW_BOT' # ⚠️ 본인 시트 제목 적기!
+GOOGLE_SHEET_NAME = '네_구글_스프레드시트_정확한_이름' # ⚠️ 본인 시트 제목 확인!
 # =================================================
 
 # --- 1. Render 가짜 웹서버 (Timed Out 방지용) ---
@@ -78,15 +78,31 @@ def process_mention(content, keyword_dict):
         rolls = [random.randint(1, sides) for _ in range(count)]
         total = sum(rolls)
         
-        mod_text = f" {sign} {modifier}" if sign else ""
         if sign == '+': total += modifier
         elif sign == '-': total -= modifier
-            
-        return f"🎲 주사위 결과 ({count}d{sides}{mod_text}):\n각각 [{', '.join(map(str, rolls))}] 나옴\n총합: {total}"
+        
+        # 시트에 'dice' 키워드가 있으면 시트 양식 사용, 없으면 기본 양식
+        if 'dice' in keyword_dict:
+            template = random.choice(keyword_dict['dice'])
+            return template.format(
+                total=total,
+                rolls=f"[{', '.join(map(str, rolls))}]",
+                count=count,
+                sides=sides
+            )
+        else:
+            return f"{total} ({', '.join(map(str, rolls))})"
 
-    # 2. YN 기능에 대한 답변 (yn, YN, yN, Yn 대소문자 구분 없음)
+    # 2. YN 기능에 대한 답변
     if re.search(r'\b(yn)\b', text, re.IGNORECASE):
-        return f"🔮 질문에 대한 답변: {random.choice(['Y', 'N'])}"
+        yn_result = random.choice(['Y', 'N'])
+        
+        # 시트에 'yn' 키워드가 있으면 시트 양식 사용, 없으면 기본 양식
+        if 'yn' in keyword_dict:
+            template = random.choice(keyword_dict['yn'])
+            return template.format(result=yn_result)
+        else:
+            return f"{yn_result}"
 
     # 3. [대괄호] 키워드 자동 답변 기능
     user_brackets = re.findall(r'\[(.*?)\]', text)
@@ -147,6 +163,5 @@ def main():
         time.sleep(15)
 
 if __name__ == "__main__":
-    # Render 타임아웃 방지용 웹서버 스레드 시작
     threading.Thread(target=run_flask, daemon=True).start()
     main()
