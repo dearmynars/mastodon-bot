@@ -13,10 +13,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 MASTODON_ACCESS_TOKEN = os.environ.get('MASTODON_ACCESS_TOKEN', '')
 MASTODON_API_BASE_URL = 'https://planet.moe'
 
-GOOGLE_SHEET_NAME = 'NEW_BOT' # ⚠️ 본인 시트 제목 적기!
+GOOGLE_SHEET_NAME = 'NEW_BOT' # ⚠️ 본인 시트 제목 정확히 작성!
 # =================================================
 
-# --- 1. Render 가짜 웹서버 (Timed Out 방지용) ---
+# --- 1. Render 가짜 웹서버 ---
 app = Flask('')
 
 @app.route('/')
@@ -31,19 +31,27 @@ def run_flask():
 # --- 2. 구글 인증 및 마스토돈 연결 ---
 json_str = os.environ.get('GOOGLE_CREDS_JSON')
 if json_str:
-    creds_dict = json.loads(json_str)
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        creds_dict, 
-        scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    )
+    try:
+        creds_dict = json.loads(json_str)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            creds_dict, 
+            scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        )
+        gc = gspread.authorize(creds)
+    except Exception as e:
+        print(f"❌ 구글 인증 생성 실패: {e}")
+        gc = None
 else:
     print("❌ 오류: GOOGLE_CREDS_JSON 환경변수가 설정되지 않았습니다.")
+    gc = None
 
-gc = gspread.authorize(creds)
 mastodon = Mastodon(access_token=MASTODON_ACCESS_TOKEN, api_base_url=MASTODON_API_BASE_URL)
 
 def get_google_sheet_data():
     """구글 시트에서 최신 키워드와 답변 리스트를 읽어옵니다."""
+    if not gc:
+        print("❌ 구글 인증(gc)이 없어 시트를 읽을 수 없습니다.")
+        return {}
     try:
         sheet = gc.open(GOOGLE_SHEET_NAME).sheet1
         records = sheet.get_all_records()
@@ -57,7 +65,7 @@ def get_google_sheet_data():
                 keyword_dict[kw].append(rep)
         return keyword_dict
     except Exception as e:
-        print(f"구글 시트 불러오기 실패: {e}")
+        print(f"❌ 구글 시트 불러오기 실패: {e}")
         return {}
 
 def clean_html(raw_html):
@@ -68,7 +76,7 @@ def process_mention(content, keyword_dict):
     """멘션 내용을 분석하여 알맞은 답변 리턴"""
     text = clean_html(content)
     
-    # 1. nDm 주사위 기능 (예: 1d100, 2d50+10, 3d6-2 등)
+    # 1. nDm 주사위 기능
     dice_match = re.search(r'(\d+)d(\d+)(?:([+-])(\d+))?', text, re.IGNORECASE)
     if dice_match:
         count, sides = int(dice_match.group(1)), int(dice_match.group(2))
@@ -96,7 +104,7 @@ def process_mention(content, keyword_dict):
         else:
             return f"{count}d{sides} 결과 : {total}"
 
-    # 2. YN 기능에 대한 답변
+    # 2. YN 기능
     if re.search(r'\b(yn)\b', text, re.IGNORECASE):
         yn_result = random.choice(['Y', 'N'])
         if 'yn' in keyword_dict:
@@ -105,9 +113,8 @@ def process_mention(content, keyword_dict):
         else:
             return f"{yn_result}"
 
-    # 3. [대괄호] 키워드 자동 답변 기능
+    # 3. [대괄호] 키워드 자동 답변
     user_brackets = re.findall(r'\[(.*?)\]', text)
-    
     if user_brackets:
         matched_replies = []
         for b_word in user_brackets:
@@ -121,7 +128,7 @@ def process_mention(content, keyword_dict):
     return None
 
 def auto_toot_loop():
-    """3시간~6시간 간격으로 구글 시트의 auto_toot 문구를 퍼블릭으로 자동 작성합니다."""
+    """3시간~6시간 간격으로 구글 시트의 auto_toot 문구를 팔로워 전용으로 자동 작성합니다."""
     while True:
         wait_seconds = random.randint(3 * 3600, 6 * 3600)
         hours = round(wait_seconds / 3600, 2)
@@ -138,15 +145,16 @@ def auto_toot_loop():
             print(f"자동 툿 작성 중 오류 발생: {e}")
 
 def main():
-    print("🤖 마스토돈 15초 칼답 & 자동 툿 봇이 가동되었습니다!")
+    print("🤖 마스토돈 15초 칼답 루프 시작!")
     last_notification_id = None
     
     try:
         init_notes = mastodon.notifications(limit=1)
         if init_notes:
             last_notification_id = init_notes[0]['id']
+            print(f"📌 기준 알림 ID 설정 완료: {last_notification_id}")
     except Exception as e:
-        print(f"최초 알림 로드 오류: {e}")
+        print(f"❌ 최초 알림 로드 오류: {e}")
 
     while True:
         try:
@@ -173,19 +181,14 @@ def main():
                             in_reply_to_id=status_id,
                             visibility=original_visibility
                         )
-                        print(f"[{sender}]에게 ({original_visibility})로 답장 완료!")
+                        print(f"✉️ [{sender}]에게 ({original_visibility})로 답장 완료!")
             
         except Exception as e:
-            print(f"오류 발생: {e}")
+            print(f"❌ 감시 루프 오류 발생: {e}")
             
         time.sleep(15)
 
 if __name__ == "__main__":
-    # Render 타임아웃 방지용 웹서버 스레드
     threading.Thread(target=run_flask, daemon=True).start()
-    
-    # 자동 툿 주기 스레드
     threading.Thread(target=auto_toot_loop, daemon=True).start()
-    
-    # 메인 멘션 감시 실행
     main()
